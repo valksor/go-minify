@@ -1,0 +1,1143 @@
+package minify
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// Test helper functions
+
+func createTempDir(t testing.TB) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "minify-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	return dir
+}
+
+func createTempFile(tb testing.TB, dir, filename, content string) string {
+	tb.Helper()
+	path := filepath.Join(dir, filename)
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		tb.Fatalf("Failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		tb.Fatalf("Failed to write file: %v", err)
+	}
+	return path
+}
+
+func createBundleConfig(tb testing.TB, dir string, bundles []Bundle) string {
+	tb.Helper()
+	config := BundleConfig{Bundles: bundles}
+	data, err := json.Marshal(config)
+	if err != nil {
+		tb.Fatalf("Failed to marshal bundle config: %v", err)
+	}
+	return createTempFile(tb, dir, "bundles.json", string(data))
+}
+
+// Test sample JavaScript and CSS content.
+const (
+	sampleJS = `
+		// Sample JavaScript file
+		function hello() {
+			console.log("Hello, World!");
+		}
+		
+		var x = 1;
+		var y = 2;
+		var z = x + y;
+		
+		hello();
+	`
+
+	sampleCSS = `
+		/* Sample CSS file */
+		body {
+			margin: 0;
+			padding: 0;
+			font-family: Arial, sans-serif;
+		}
+		
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+		}
+		
+		h1 {
+			color: #333;
+			font-size: 2em;
+		}
+	`
+
+	sampleJS2 = `
+		// Another JavaScript file
+		function goodbye() {
+			console.log("Goodbye!");
+		}
+		
+		goodbye();
+	`
+)
+
+// Tests for Config type
+
+func TestConfig(t *testing.T) {
+	t.Run("ValidConfig", func(t *testing.T) {
+		config := Config{
+			BundlesFile: "bundles.json",
+			OutputDir:   "./output",
+		}
+
+		if config.BundlesFile != "bundles.json" {
+			t.Errorf("Expected BundlesFile to be 'bundles.json', got %s", config.BundlesFile)
+		}
+
+		if config.OutputDir != "./output" {
+			t.Errorf("Expected OutputDir to be './output', got %s", config.OutputDir)
+		}
+	})
+}
+
+// Tests for Bundle type
+
+func TestBundle(t *testing.T) {
+	t.Run("ValidBundle", func(t *testing.T) {
+		bundle := Bundle{
+			Name:  "test",
+			Files: []string{"file1.js", "file2.js"},
+		}
+
+		if bundle.Name != "test" {
+			t.Errorf("Expected Name to be 'test', got %s", bundle.Name)
+		}
+
+		if len(bundle.Files) != 2 {
+			t.Errorf("Expected 2 files, got %d", len(bundle.Files))
+		}
+	})
+}
+
+// Tests for BundleConfig type
+
+func TestBundleConfig(t *testing.T) {
+	t.Run("ValidBundleConfig", func(t *testing.T) {
+		config := BundleConfig{
+			Bundles: []Bundle{
+				{Name: "bundle1", Files: []string{"file1.js"}},
+				{Name: "bundle2", Files: []string{"file2.js"}},
+			},
+		}
+
+		if len(config.Bundles) != 2 {
+			t.Errorf("Expected 2 bundles, got %d", len(config.Bundles))
+		}
+	})
+}
+
+// Tests for loadBundleConfig function
+
+func TestLoadBundleConfig(t *testing.T) {
+	t.Run("ValidConfig", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		bundles := []Bundle{
+			{Name: "test", Files: []string{"*.js"}},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		config, err := loadBundleConfig(configFile)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		if len(config.Bundles) != 1 {
+			t.Errorf("Expected 1 bundle, got %d", len(config.Bundles))
+		}
+
+		if config.Bundles[0].Name != "test" {
+			t.Errorf("Expected bundle name 'test', got %s", config.Bundles[0].Name)
+		}
+	})
+
+	t.Run("FileNotFound", func(t *testing.T) {
+		_, err := loadBundleConfig("nonexistent.json")
+		if err == nil {
+			t.Error("Expected error for non-existent file")
+		}
+
+		if !strings.Contains(err.Error(), "failed to read bundle config file") {
+			t.Errorf("Expected 'failed to read bundle config file' error, got: %v", err)
+		}
+	})
+
+	t.Run("InvalidJSON", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		configFile := createTempFile(t, tempDir, "invalid.json", "{invalid json")
+
+		_, err := loadBundleConfig(configFile)
+		if err == nil {
+			t.Error("Expected error for invalid JSON")
+		}
+
+		if !strings.Contains(err.Error(), "failed to unmarshal bundle config") {
+			t.Errorf("Expected 'failed to unmarshal bundle config' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for findBundle function
+
+func TestFindBundle(t *testing.T) {
+	bundles := []Bundle{
+		{Name: "bundle1", Files: []string{"file1.js"}},
+		{Name: "bundle2", Files: []string{"file2.js"}},
+		{Name: "bundle3", Files: []string{"file3.js"}},
+	}
+
+	t.Run("BundleFound", func(t *testing.T) {
+		bundle, err := findBundle(bundles, "bundle2")
+		if err != nil {
+			t.Fatalf("Failed to find bundle: %v", err)
+		}
+
+		if bundle.Name != "bundle2" {
+			t.Errorf("Expected bundle name 'bundle2', got %s", bundle.Name)
+		}
+	})
+
+	t.Run("BundleNotFound", func(t *testing.T) {
+		_, err := findBundle(bundles, "nonexistent")
+		if err == nil {
+			t.Error("Expected error for non-existent bundle")
+		}
+
+		if !strings.Contains(err.Error(), "bundle nonexistent not found") {
+			t.Errorf("Expected 'bundle nonexistent not found' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for collectBundleFiles function
+
+func TestCollectBundleFiles(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create test files
+	createTempFile(t, tempDir, "file1.js", sampleJS)
+	createTempFile(t, tempDir, "file2.js", sampleJS2)
+	createTempFile(t, tempDir, "subdir/file3.js", sampleJS)
+
+	t.Run("ValidPatterns", func(t *testing.T) {
+		patterns := []string{
+			filepath.Join(tempDir, "*.js"),
+			filepath.Join(tempDir, "subdir/*.js"),
+		}
+
+		files, err := collectBundleFiles(patterns)
+		if err != nil {
+			t.Fatalf("Failed to collect files: %v", err)
+		}
+
+		if len(files) != 3 {
+			t.Errorf("Expected 3 files, got %d", len(files))
+		}
+	})
+
+	t.Run("NoFilesFound", func(t *testing.T) {
+		patterns := []string{filepath.Join(tempDir, "*.nonexistent")}
+
+		_, err := collectBundleFiles(patterns)
+		if err == nil {
+			t.Error("Expected error for no files found")
+		}
+
+		if !strings.Contains(err.Error(), "no files found for pattern") {
+			t.Errorf("Expected 'no files found for pattern' error, got: %v", err)
+		}
+	})
+
+	t.Run("InvalidPattern", func(t *testing.T) {
+		patterns := []string{"["}
+
+		_, err := collectBundleFiles(patterns)
+		if err == nil {
+			t.Error("Expected error for invalid pattern")
+		}
+
+		if !strings.Contains(err.Error(), "failed to glob pattern") {
+			t.Errorf("Expected 'failed to glob pattern' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for readAndCombineFiles function
+
+func TestReadAndCombineFiles(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	file1 := createTempFile(t, tempDir, "file1.js", "content1")
+	file2 := createTempFile(t, tempDir, "file2.js", "content2")
+
+	t.Run("ValidFiles", func(t *testing.T) {
+		files := []string{file1, file2}
+
+		content, err := readAndCombineFiles(files)
+		if err != nil {
+			t.Fatalf("Failed to read and combine files: %v", err)
+		}
+
+		expected := "content1\ncontent2\n"
+		if content != expected {
+			t.Errorf("Expected content %q, got %q", expected, content)
+		}
+	})
+
+	t.Run("NonExistentFile", func(t *testing.T) {
+		files := []string{"nonexistent.js"}
+
+		_, err := readAndCombineFiles(files)
+		if err == nil {
+			t.Error("Expected error for non-existent file")
+		}
+
+		if !strings.Contains(err.Error(), "failed to read file") {
+			t.Errorf("Expected 'failed to read file' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for contentMinify function
+
+func TestContentMinify(t *testing.T) {
+	t.Run("ValidJavaScript", func(t *testing.T) {
+		content := `
+			function hello() {
+				console.log("Hello, World!");
+			}
+			hello();
+		`
+
+		minified, err := contentMinify(content)
+		if err != nil {
+			t.Fatalf("Failed to minify content: %v", err)
+		}
+
+		if len(minified) >= len(content) {
+			t.Error("Expected minified content to be smaller")
+		}
+
+		// Check that the minified content contains the essential parts
+		if !strings.Contains(minified, "function hello()") {
+			t.Error("Expected minified content to contain function definition")
+		}
+	})
+
+	t.Run("InvalidJavaScript", func(t *testing.T) {
+		content := "function unclosed() {"
+
+		_, err := contentMinify(content)
+		if err == nil {
+			t.Error("Expected error for invalid JavaScript")
+		}
+
+		if !strings.Contains(err.Error(), "failed to minify content") {
+			t.Errorf("Expected 'failed to minify content' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for fileContentMinify function
+
+func TestFileContentMinify(t *testing.T) {
+	t.Run("ValidCSS", func(t *testing.T) {
+		content := []byte(`
+			body {
+				margin: 0;
+				padding: 0;
+			}
+		`)
+
+		minified, err := fileContentMinify("css", content)
+		if err != nil {
+			t.Fatalf("Failed to minify CSS: %v", err)
+		}
+
+		if len(minified) >= len(content) {
+			t.Error("Expected minified content to be smaller")
+		}
+
+		minifiedStr := string(minified)
+		if !strings.Contains(minifiedStr, "body{margin:0;padding:0}") {
+			t.Error("Expected minified CSS to be compressed")
+		}
+	})
+
+	t.Run("ValidJavaScript", func(t *testing.T) {
+		content := []byte(`
+			function hello() {
+				console.log("Hello");
+			}
+		`)
+
+		minified, err := fileContentMinify("js", content)
+		if err != nil {
+			t.Fatalf("Failed to minify JavaScript: %v", err)
+		}
+
+		if len(minified) >= len(content) {
+			t.Error("Expected minified content to be smaller")
+		}
+	})
+
+	t.Run("UnsupportedFileType", func(t *testing.T) {
+		content := []byte("test content")
+
+		_, err := fileContentMinify("txt", content)
+		if err == nil {
+			t.Error("Expected error for unsupported file type")
+		}
+
+		if !strings.Contains(err.Error(), "unsupported file type") {
+			t.Errorf("Expected 'unsupported file type' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for generateMinifiedFilename function
+
+func TestGenerateMinifiedFilename(t *testing.T) {
+	content := []byte("test content")
+
+	t.Run("JavaScriptFile", func(t *testing.T) {
+		filename := generateMinifiedFilename("/path/to/main.js", "js", content)
+
+		if !strings.HasPrefix(filename, "main.") {
+			t.Errorf("Expected filename to start with 'main.', got %s", filename)
+		}
+
+		if !strings.HasSuffix(filename, ".min.js") {
+			t.Errorf("Expected filename to end with '.min.js', got %s", filename)
+		}
+
+		// Check that it contains a hash (8 characters between name and .min.js)
+		parts := strings.Split(filename, ".")
+		if len(parts) != 4 { // main.hash.min.js
+			t.Errorf("Expected filename to have 4 parts, got %d: %s", len(parts), filename)
+		}
+
+		if len(parts[1]) != 8 {
+			t.Errorf("Expected hash to be 8 characters, got %d: %s", len(parts[1]), parts[1])
+		}
+	})
+
+	t.Run("CSSFile", func(t *testing.T) {
+		filename := generateMinifiedFilename("/path/to/style.css", "css", content)
+
+		if !strings.HasPrefix(filename, "style.") {
+			t.Errorf("Expected filename to start with 'style.', got %s", filename)
+		}
+
+		if !strings.HasSuffix(filename, ".css") {
+			t.Errorf("Expected filename to end with '.css', got %s", filename)
+		}
+
+		// Check that it contains a hash (8 characters between name and .css)
+		parts := strings.Split(filename, ".")
+		if len(parts) != 3 { // style.hash.css
+			t.Errorf("Expected filename to have 3 parts, got %d: %s", len(parts), filename)
+		}
+
+		if len(parts[1]) != 8 {
+			t.Errorf("Expected hash to be 8 characters, got %d: %s", len(parts[1]), parts[1])
+		}
+	})
+}
+
+// Tests for ProcessBundles function
+
+func TestProcessBundles_ValidBundles(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source files
+	createTempFile(t, tempDir, "src/file1.js", sampleJS)
+	createTempFile(t, tempDir, "src/file2.js", sampleJS2)
+
+	// Create bundle config
+	bundles := []Bundle{
+		{
+			Name:  "test",
+			Files: []string{filepath.Join(tempDir, "src/*.js")},
+		},
+	}
+	configFile := createBundleConfig(t, tempDir, bundles)
+
+	// Create output directory
+	outputDir := filepath.Join(tempDir, "output")
+
+	config := Config{
+		BundlesFile: configFile,
+		OutputDir:   outputDir,
+	}
+
+	err := ProcessBundles(config)
+	if err != nil {
+		t.Fatalf("Failed to process bundles: %v", err)
+	}
+
+	// Check that output file was created
+	files, err := os.ReadDir(outputDir)
+	if err != nil {
+		t.Fatalf("Failed to read output directory: %v", err)
+	}
+
+	if len(files) != 1 {
+		t.Errorf("Expected 1 output file, got %d", len(files))
+	}
+
+	// Check filename format
+	filename := files[0].Name()
+	if !strings.HasPrefix(filename, "test.") {
+		t.Errorf("Expected filename to start with 'test.', got %s", filename)
+	}
+
+	if !strings.HasSuffix(filename, ".min.js") {
+		t.Errorf("Expected filename to end with '.min.js', got %s", filename)
+	}
+}
+
+func TestProcessBundles_InvalidConfigFile(t *testing.T) {
+	config := Config{
+		BundlesFile: "nonexistent.json",
+		OutputDir:   "/tmp",
+	}
+
+	err := ProcessBundles(config)
+	if err == nil {
+		t.Fatal("Expected error for invalid config file")
+	}
+
+	if !strings.Contains(err.Error(), "failed to load bundle config") {
+		t.Errorf("Expected 'failed to load bundle config' error, got: %v", err)
+	}
+}
+
+func TestProcessBundles_NoFilesFound(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	bundles := []Bundle{
+		{
+			Name:  "test",
+			Files: []string{filepath.Join(tempDir, "*.nonexistent")},
+		},
+	}
+	configFile := createBundleConfig(t, tempDir, bundles)
+
+	config := Config{
+		BundlesFile: configFile,
+		OutputDir:   filepath.Join(tempDir, "output"),
+	}
+
+	err := ProcessBundles(config)
+	if err == nil {
+		t.Fatal("Expected error for no files found")
+	}
+
+	if !strings.Contains(err.Error(), "failed to process bundle") {
+		t.Errorf("Expected 'failed to process bundle' error, got: %v", err)
+	}
+}
+
+// Tests for GetBundleHash function
+
+func TestGetBundleHash(t *testing.T) {
+	t.Run("ValidBundle", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		// Create source files
+		createTempFile(t, tempDir, "src/file1.js", sampleJS)
+		createTempFile(t, tempDir, "src/file2.js", sampleJS2)
+
+		// Create bundle config
+		bundles := []Bundle{
+			{
+				Name:  "test",
+				Files: []string{filepath.Join(tempDir, "src/*.js")},
+			},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		hash, err := GetBundleHash("test", configFile)
+		if err != nil {
+			t.Fatalf("Failed to get bundle hash: %v", err)
+		}
+
+		if len(hash) != 8 {
+			t.Errorf("Expected hash length to be 8, got %d", len(hash))
+		}
+
+		// Test consistency - same content should produce same hash
+		hash2, err := GetBundleHash("test", configFile)
+		if err != nil {
+			t.Fatalf("Failed to get bundle hash again: %v", err)
+		}
+
+		if hash != hash2 {
+			t.Errorf("Expected consistent hash, got %s and %s", hash, hash2)
+		}
+	})
+
+	t.Run("BundleNotFound", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		bundles := []Bundle{
+			{Name: "other", Files: []string{"*.js"}},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		_, err := GetBundleHash("nonexistent", configFile)
+		if err == nil {
+			t.Error("Expected error for non-existent bundle")
+		}
+
+		if !strings.Contains(err.Error(), "bundle nonexistent not found") {
+			t.Errorf("Expected 'bundle nonexistent not found' error, got: %v", err)
+		}
+	})
+}
+
+// Tests for GetBundleFilename function
+
+func TestGetBundleFilename(t *testing.T) {
+	t.Run("ValidBundle", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		// Create source files
+		createTempFile(t, tempDir, "src/file1.js", sampleJS)
+
+		// Create bundle config
+		bundles := []Bundle{
+			{
+				Name:  "test",
+				Files: []string{filepath.Join(tempDir, "src/*.js")},
+			},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		filename, err := GetBundleFilename("test", configFile)
+		if err != nil {
+			t.Fatalf("Failed to get bundle filename: %v", err)
+		}
+
+		if !strings.HasPrefix(filename, "test.") {
+			t.Errorf("Expected filename to start with 'test.', got %s", filename)
+		}
+
+		if !strings.HasSuffix(filename, ".min.js") {
+			t.Errorf("Expected filename to end with '.min.js', got %s", filename)
+		}
+
+		// Check format: name.hash.min.js
+		parts := strings.Split(filename, ".")
+		if len(parts) != 4 {
+			t.Errorf("Expected filename to have 4 parts, got %d: %s", len(parts), filename)
+		}
+
+		if len(parts[1]) != 8 {
+			t.Errorf("Expected hash to be 8 characters, got %d", len(parts[1]))
+		}
+	})
+}
+
+// Tests for BundleExists function
+
+func TestBundleExists(t *testing.T) {
+	t.Run("BundleExists", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		// Create source files
+		createTempFile(t, tempDir, "src/file1.js", sampleJS)
+
+		// Create bundle config
+		bundles := []Bundle{
+			{
+				Name:  "test",
+				Files: []string{filepath.Join(tempDir, "src/*.js")},
+			},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		// Create output directory
+		outputDir := filepath.Join(tempDir, "output")
+
+		// Initially bundle doesn't exist
+		exists, err := BundleExists("test", configFile, outputDir)
+		if err != nil {
+			t.Fatalf("Failed to check bundle existence: %v", err)
+		}
+
+		if exists {
+			t.Error("Expected bundle to not exist initially")
+		}
+
+		// Process bundle
+		config := Config{
+			BundlesFile: configFile,
+			OutputDir:   outputDir,
+		}
+
+		err = ProcessBundles(config)
+		if err != nil {
+			t.Fatalf("Failed to process bundles: %v", err)
+		}
+
+		// Now bundle should exist
+		exists, err = BundleExists("test", configFile, outputDir)
+		if err != nil {
+			t.Fatalf("Failed to check bundle existence after processing: %v", err)
+		}
+
+		if !exists {
+			t.Error("Expected bundle to exist after processing")
+		}
+	})
+
+	t.Run("BundleNotFound", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		bundles := []Bundle{
+			{Name: "other", Files: []string{"*.js"}},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		_, err := BundleExists("nonexistent", configFile, tempDir)
+		if err == nil {
+			t.Error("Expected error for non-existent bundle")
+		}
+	})
+}
+
+// Tests for CleanOldBundles function
+
+func TestCleanOldBundles(t *testing.T) {
+	t.Run("CleanOldVersions", func(t *testing.T) {
+		tempDir := createTempDir(t)
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				t.Logf("Failed to remove temp directory: %v", err)
+			}
+		}()
+
+		// Create source files
+		createTempFile(t, tempDir, "src/file1.js", sampleJS)
+
+		// Create bundle config
+		bundles := []Bundle{
+			{
+				Name:  "test",
+				Files: []string{filepath.Join(tempDir, "src/*.js")},
+			},
+		}
+		configFile := createBundleConfig(t, tempDir, bundles)
+
+		outputDir := filepath.Join(tempDir, "output")
+
+		// Create some old bundle files
+		createTempFile(t, outputDir, "test.old1hash.min.js", "old content 1")
+		createTempFile(t, outputDir, "test.old2hash.min.js", "old content 2")
+
+		// Process current bundle
+		config := Config{
+			BundlesFile: configFile,
+			OutputDir:   outputDir,
+		}
+
+		err := ProcessBundles(config)
+		if err != nil {
+			t.Fatalf("Failed to process bundles: %v", err)
+		}
+
+		// Clean old bundles
+		err = CleanOldBundles("test", configFile, outputDir)
+		if err != nil {
+			t.Fatalf("Failed to clean old bundles: %v", err)
+		}
+
+		// Check that only current bundle remains
+		files, err := os.ReadDir(outputDir)
+		if err != nil {
+			t.Fatalf("Failed to read output directory: %v", err)
+		}
+
+		if len(files) != 1 {
+			t.Errorf("Expected 1 file after cleanup, got %d", len(files))
+		}
+
+		// Check that remaining file is the current bundle
+		filename := files[0].Name()
+		if !strings.HasPrefix(filename, "test.") || !strings.HasSuffix(filename, ".min.js") {
+			t.Errorf("Expected current bundle file, got %s", filename)
+		}
+	})
+}
+
+// Tests for AndVersionFile function
+
+func TestAndVersionFile_ValidCSSFile(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source CSS file
+	inputFile := createTempFile(t, tempDir, "src/main.css", sampleCSS)
+	outputDir := filepath.Join(tempDir, "output")
+
+	filename, err := AndVersionFile(inputFile, outputDir, "css")
+	if err != nil {
+		t.Fatalf("Failed to version CSS file: %v", err)
+	}
+
+	if !strings.HasPrefix(filename, "main.") {
+		t.Errorf("Expected filename to start with 'main.', got %s", filename)
+	}
+
+	if !strings.HasSuffix(filename, ".css") {
+		t.Errorf("Expected filename to end with '.css', got %s", filename)
+	}
+
+	// Check that file was created
+	outputPath := filepath.Join(outputDir, filename)
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Errorf("Expected output file to exist: %v", err)
+	}
+
+	// Check that content is minified
+	content, err := os.ReadFile(outputPath) // #nosec G304 -- outputPath is in test temp directory
+	if err != nil {
+		t.Fatalf("Failed to read output file: %v", err)
+	}
+
+	if len(content) >= len(sampleCSS) {
+		t.Error("Expected minified content to be smaller")
+	}
+}
+
+func TestAndVersionFile_ValidJSFile(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source JS file
+	inputFile := createTempFile(t, tempDir, "src/main.js", sampleJS)
+	outputDir := filepath.Join(tempDir, "output")
+
+	filename, err := AndVersionFile(inputFile, outputDir, "js")
+	if err != nil {
+		t.Fatalf("Failed to version JS file: %v", err)
+	}
+
+	if !strings.HasPrefix(filename, "main.") {
+		t.Errorf("Expected filename to start with 'main.', got %s", filename)
+	}
+
+	if !strings.HasSuffix(filename, ".min.js") {
+		t.Errorf("Expected filename to end with '.min.js', got %s", filename)
+	}
+
+	// Check that file was created
+	outputPath := filepath.Join(outputDir, filename)
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Errorf("Expected output file to exist: %v", err)
+	}
+}
+
+func TestAndVersionFile_UnsupportedFileType(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	inputFile := createTempFile(t, tempDir, "src/main.txt", "text content")
+	outputDir := filepath.Join(tempDir, "output")
+
+	_, err := AndVersionFile(inputFile, outputDir, "txt")
+	if err == nil {
+		t.Fatal("Expected error for unsupported file type")
+	}
+
+	if !strings.Contains(err.Error(), "unsupported file type") {
+		t.Errorf("Expected 'unsupported file type' error, got: %v", err)
+	}
+}
+
+func TestAndVersionFile_NonExistentFile(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	inputFile := filepath.Join(tempDir, "nonexistent.css")
+	outputDir := filepath.Join(tempDir, "output")
+
+	_, err := AndVersionFile(inputFile, outputDir, "css")
+	if err == nil {
+		t.Fatal("Expected error for non-existent file")
+	}
+
+	if !strings.Contains(err.Error(), "failed to read css file") {
+		t.Errorf("Expected 'failed to read css file' error, got: %v", err)
+	}
+}
+
+func TestAndVersionFile_ExistingFile(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source CSS file
+	inputFile := createTempFile(t, tempDir, "src/main.css", sampleCSS)
+	outputDir := filepath.Join(tempDir, "output")
+
+	// First call should create the file
+	filename1, err := AndVersionFile(inputFile, outputDir, "css")
+	if err != nil {
+		t.Fatalf("Failed to version CSS file: %v", err)
+	}
+
+	// Second call should return existing filename without recreating
+	filename2, err := AndVersionFile(inputFile, outputDir, "css")
+	if err != nil {
+		t.Fatalf("Failed to version CSS file again: %v", err)
+	}
+
+	if filename1 != filename2 {
+		t.Errorf("Expected same filename for same content, got %s and %s", filename1, filename2)
+	}
+}
+
+// Tests for AndVersionCSS function
+
+func TestAndVersionCSS_ValidCSSFile(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source CSS file
+	inputFile := createTempFile(t, tempDir, "src/styles.css", sampleCSS)
+	outputDir := filepath.Join(tempDir, "output")
+
+	filename, err := AndVersionCSS(inputFile, outputDir)
+	if err != nil {
+		t.Fatalf("Failed to version CSS file: %v", err)
+	}
+
+	if !strings.HasPrefix(filename, "styles.") {
+		t.Errorf("Expected filename to start with 'styles.', got %s", filename)
+	}
+
+	if !strings.HasSuffix(filename, ".css") {
+		t.Errorf("Expected filename to end with '.css', got %s", filename)
+	}
+
+	// Check that file was created
+	outputPath := filepath.Join(outputDir, filename)
+	if _, err := os.Stat(outputPath); err != nil {
+		t.Errorf("Expected output file to exist: %v", err)
+	}
+
+	// Check that content is minified
+	content, err := os.ReadFile(outputPath) // #nosec G304 -- outputPath is in test temp directory
+	if err != nil {
+		t.Fatalf("Failed to read output file: %v", err)
+	}
+
+	if len(content) >= len(sampleCSS) {
+		t.Error("Expected minified content to be smaller")
+	}
+}
+
+func TestAndVersionCSS_NonExistentFile(t *testing.T) {
+	tempDir := createTempDir(t)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	inputFile := filepath.Join(tempDir, "nonexistent.css")
+	outputDir := filepath.Join(tempDir, "output")
+
+	_, err := AndVersionCSS(inputFile, outputDir)
+	if err == nil {
+		t.Error("Expected error for non-existent file")
+	} else if !strings.Contains(err.Error(), "failed to read css file") {
+		t.Errorf("Expected 'failed to read css file' error, got: %v", err)
+	}
+}
+
+// Benchmark tests
+
+func BenchmarkProcessBundles(b *testing.B) {
+	tempDir := createTempDir(b)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			b.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source files
+	createTempFile(b, tempDir, "src/file1.js", sampleJS)
+	createTempFile(b, tempDir, "src/file2.js", sampleJS2)
+
+	// Create bundle config
+	bundles := []Bundle{
+		{
+			Name:  "test",
+			Files: []string{filepath.Join(tempDir, "src/*.js")},
+		},
+	}
+	configFile := createBundleConfig(b, tempDir, bundles)
+
+	config := Config{
+		BundlesFile: configFile,
+		OutputDir:   filepath.Join(tempDir, "output"),
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := ProcessBundles(config)
+		if err != nil {
+			b.Fatalf("Failed to process bundles: %v", err)
+		}
+	}
+}
+
+func BenchmarkGetBundleHash(b *testing.B) {
+	tempDir := createTempDir(b)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			b.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	// Create source files
+	createTempFile(b, tempDir, "src/file1.js", sampleJS)
+	createTempFile(b, tempDir, "src/file2.js", sampleJS2)
+
+	// Create bundle config
+	bundles := []Bundle{
+		{
+			Name:  "test",
+			Files: []string{filepath.Join(tempDir, "src/*.js")},
+		},
+	}
+	configFile := createBundleConfig(b, tempDir, bundles)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := GetBundleHash("test", configFile)
+		if err != nil {
+			b.Fatalf("Failed to get bundle hash: %v", err)
+		}
+	}
+}
+
+func BenchmarkAndVersionFile(b *testing.B) {
+	tempDir := createTempDir(b)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			b.Logf("Failed to remove temp directory: %v", err)
+		}
+	}()
+
+	inputFile := createTempFile(b, tempDir, "src/main.css", sampleCSS)
+	outputDir := filepath.Join(tempDir, "output")
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Use different output directory for each iteration to avoid cache
+		currentOutputDir := filepath.Join(outputDir, fmt.Sprintf("iter%d", i))
+		_, err := AndVersionFile(inputFile, currentOutputDir, "css")
+		if err != nil {
+			b.Fatalf("Failed to version file: %v", err)
+		}
+	}
+}
