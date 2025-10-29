@@ -25,6 +25,17 @@ import (
 	"github.com/tdewolff/minify/v2/js"
 )
 
+// MIME type constants
+const (
+	mimeJS  = "application/javascript"
+	mimeCSS = "text/css"
+)
+
+// Filename format constants
+const (
+	bundleFilenameFormat = "%s.%s.min.js"
+)
+
 // Config represents the configuration for bundle processing.
 // It specifies the location of the bundle configuration file and
 // the output directory for processed bundles.
@@ -91,7 +102,7 @@ func ProcessBundles(config Config) error {
 	}
 
 	m := minify.New()
-	m.AddFunc("application/javascript", js.Minify)
+	m.AddFunc(mimeJS, js.Minify)
 
 	for _, bundle := range bundleConfig.Bundles {
 		if err := processBundle(m, bundle, config.OutputDir); err != nil {
@@ -171,7 +182,7 @@ func processBundle(minifier *minify.M, bundle Bundle, outputDir string) error {
 	}
 
 	// Minify the combined content
-	minified, err := minifier.String("application/javascript", combinedContent.String())
+	minified, err := minifier.String(mimeJS, combinedContent.String())
 	if err != nil {
 		return fmt.Errorf("failed to minify bundle %s: %w", bundle.Name, err)
 	}
@@ -179,7 +190,7 @@ func processBundle(minifier *minify.M, bundle Bundle, outputDir string) error {
 	// Generate content-based hash for cache-busting
 	hash := xxhash.Sum64String(minified)
 	hashStr := strconv.FormatUint(hash, 36)[:8]
-	filename := fmt.Sprintf("%s.%s.min.js", bundle.Name, hashStr)
+	filename := fmt.Sprintf(bundleFilenameFormat, bundle.Name, hashStr)
 	outputPath := filepath.Join(outputDir, filename)
 
 	// Create output directory if it doesn't exist
@@ -329,8 +340,8 @@ func readAndCombineFiles(files []string) (string, error) {
 //   - error: Any error that occurred during minification
 func contentMinify(content string) (string, error) {
 	minifier := minify.New()
-	minifier.AddFunc("application/javascript", js.Minify)
-	result, err := minifier.String("application/javascript", content)
+	minifier.AddFunc(mimeJS, js.Minify)
+	result, err := minifier.String(mimeJS, content)
 	if err != nil {
 		return "", fmt.Errorf("failed to minify content: %w", err)
 	}
@@ -363,7 +374,7 @@ func GetBundleFilename(bundleName, bundlesFile string) (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf("%s.%s.min.js", bundleName, hash), nil
+	return fmt.Sprintf(bundleFilenameFormat, bundleName, hash), nil
 }
 
 // BundleExists checks if a bundle file already exists in the output directory.
@@ -471,8 +482,8 @@ func fileContentMinify(fileType string, content []byte) ([]byte, error) {
 		minified, err = m.Bytes("text/css", content)
 	case "js":
 		m := minify.New()
-		m.AddFunc("application/javascript", js.Minify)
-		minified, err = m.Bytes("application/javascript", content)
+		m.AddFunc(mimeJS, js.Minify)
+		minified, err = m.Bytes(mimeJS, content)
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", fileType)
 	}
@@ -497,7 +508,7 @@ func generateMinifiedFilename(inputPath, fileType string, minified []byte) strin
 	hashStr := strconv.FormatUint(hash, 36)[:8]
 	baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
 	if fileType == "js" {
-		return fmt.Sprintf("%s.%s.min.js", baseName, hashStr)
+		return fmt.Sprintf(bundleFilenameFormat, baseName, hashStr)
 	}
 	return fmt.Sprintf("%s.%s.%s", baseName, hashStr, fileType)
 }
