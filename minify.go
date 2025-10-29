@@ -25,13 +25,13 @@ import (
 	"github.com/tdewolff/minify/v2/js"
 )
 
-// MIME type constants
+// MIME type constants.
 const (
 	mimeJS  = "application/javascript"
 	mimeCSS = "text/css"
 )
 
-// Filename format constants
+// Filename format constants.
 const (
 	bundleFilenameFormat = "%s.%s.min.js"
 )
