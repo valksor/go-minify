@@ -483,7 +483,7 @@ func TestGenerateMinifiedFilename(t *testing.T) {
 
 // Tests for ProcessBundles function
 
-func TestProcessBundles_ValidBundles(t *testing.T) {
+func TestProcessBundlesValidBundles(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -538,7 +538,7 @@ func TestProcessBundles_ValidBundles(t *testing.T) {
 	}
 }
 
-func TestProcessBundles_InvalidConfigFile(t *testing.T) {
+func TestProcessBundlesInvalidConfigFile(t *testing.T) {
 	config := Config{
 		BundlesFile: "nonexistent.json",
 		OutputDir:   "/tmp",
@@ -554,7 +554,7 @@ func TestProcessBundles_InvalidConfigFile(t *testing.T) {
 	}
 }
 
-func TestProcessBundles_NoFilesFound(t *testing.T) {
+func TestProcessBundlesNoFilesFound(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -845,7 +845,7 @@ func TestCleanOldBundles(t *testing.T) {
 
 // Tests for AndVersionFile function
 
-func TestAndVersionFile_ValidCSSFile(t *testing.T) {
+func TestAndVersionFileValidCSSFile(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -887,7 +887,7 @@ func TestAndVersionFile_ValidCSSFile(t *testing.T) {
 	}
 }
 
-func TestAndVersionFile_ValidJSFile(t *testing.T) {
+func TestAndVersionFileValidJSFile(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -919,7 +919,7 @@ func TestAndVersionFile_ValidJSFile(t *testing.T) {
 	}
 }
 
-func TestAndVersionFile_UnsupportedFileType(t *testing.T) {
+func TestAndVersionFileUnsupportedFileType(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -940,7 +940,7 @@ func TestAndVersionFile_UnsupportedFileType(t *testing.T) {
 	}
 }
 
-func TestAndVersionFile_NonExistentFile(t *testing.T) {
+func TestAndVersionFileNonExistentFile(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -961,7 +961,7 @@ func TestAndVersionFile_NonExistentFile(t *testing.T) {
 	}
 }
 
-func TestAndVersionFile_ExistingFile(t *testing.T) {
+func TestAndVersionFileExistingFile(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -992,7 +992,7 @@ func TestAndVersionFile_ExistingFile(t *testing.T) {
 
 // Tests for AndVersionCSS function
 
-func TestAndVersionCSS_ValidCSSFile(t *testing.T) {
+func TestAndVersionCSSValidCSSFile(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
@@ -1034,7 +1034,7 @@ func TestAndVersionCSS_ValidCSSFile(t *testing.T) {
 	}
 }
 
-func TestAndVersionCSS_NonExistentFile(t *testing.T) {
+func TestAndVersionCSSNonExistentFile(t *testing.T) {
 	tempDir := createTempDir(t)
 	defer func() {
 		if err := os.RemoveAll(tempDir); err != nil {
