@@ -221,11 +221,11 @@ const (
 func TestConfig(t *testing.T) {
 	t.Run("ValidConfig", func(t *testing.T) {
 		config := Config{
-			BundlesFile: "bundles.json",
+			BundlesFile: testBundleConfigFile,
 			OutputDir:   "./output",
 		}
 
-		if config.BundlesFile != "bundles.json" {
+		if config.BundlesFile != testBundleConfigFile {
 			t.Errorf("Expected BundlesFile to be 'bundles.json', got %s", config.BundlesFile)
 		}
 
@@ -260,8 +260,8 @@ func TestBundleConfig(t *testing.T) {
 	t.Run("ValidBundleConfig", func(t *testing.T) {
 		config := BundleConfig{
 			Bundles: []Bundle{
-				{Name: "bundle1", Files: []string{"file1.js"}},
-				{Name: "bundle2", Files: []string{"file2.js"}},
+				{Name: "bundle1", Files: []string{testFile1Name}},
+				{Name: "bundle2", Files: []string{testFile2Name}},
 			},
 		}
 
@@ -366,8 +366,8 @@ func TestCollectBundleFiles(t *testing.T) {
 	}()
 
 	// Create test files
-	createTempFile(t, tempDir, "file1.js", sampleJS)
-	createTempFile(t, tempDir, "file2.js", sampleJS2)
+	createTempFile(t, tempDir, testFile1Name, sampleJS)
+	createTempFile(t, tempDir, testFile2Name, sampleJS2)
 	createTempFile(t, tempDir, "subdir/file3.js", sampleJS)
 
 	t.Run("ValidPatterns", func(t *testing.T) {
@@ -423,8 +423,8 @@ func TestReadAndCombineFiles(t *testing.T) {
 		}
 	}()
 
-	file1 := createTempFile(t, tempDir, "file1.js", "content1")
-	file2 := createTempFile(t, tempDir, "file2.js", "content2")
+	file1 := createTempFile(t, tempDir, testFile1Name, "content1")
+	file2 := createTempFile(t, tempDir, testFile2Name, "content2")
 
 	t.Run("ValidFiles", func(t *testing.T) {
 		files := []string{file1, file2}

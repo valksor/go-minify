@@ -121,7 +121,7 @@ func ProcessBundles(config Config) error {
 //
 // Returns:
 //   - *BundleConfig: The parsed bundle configuration
-//   - error: Any error that occurred during loading or parsing
+//   - Error: Any error that occurred during loading or parsing
 func loadBundleConfig(bundlesFile string) (*BundleConfig, error) {
 	data, err := os.ReadFile(bundlesFile) // #nosec G304 -- bundlesFile is validated by caller
 	if err != nil {
@@ -222,8 +222,8 @@ func processBundle(minifier *minify.M, bundle Bundle, outputDir string) error {
 //   - bundlesFile: Path to the bundle configuration file
 //
 // Returns:
-//   - string: The 8-character hash string in base36 format
-//   - error: Any error that occurred during processing
+//   - String: The 8-character hash string in base36 format
+//   - Error: Any error that occurred during processing
 //
 // Example:
 //
@@ -291,7 +291,7 @@ func findBundle(bundles []Bundle, bundleName string) (*Bundle, error) {
 //
 // Returns:
 //   - []string: List of all matching file paths
-//   - error: Any error that occurred during glob expansion
+//   - Error: Any error that occurred during glob expansion
 func collectBundleFiles(patterns []string) ([]string, error) {
 	var allFiles []string
 	for _, file := range patterns {
@@ -315,7 +315,7 @@ func collectBundleFiles(patterns []string) ([]string, error) {
 //
 // Returns:
 //   - string: Combined content of all files
-//   - error: Any error that occurred during file reading
+//   - Error: Any error that occurred during file reading
 func readAndCombineFiles(files []string) (string, error) {
 	var combinedContent strings.Builder
 	for _, file := range files {
@@ -337,7 +337,7 @@ func readAndCombineFiles(files []string) (string, error) {
 //
 // Returns:
 //   - string: The minified JavaScript content
-//   - error: Any error that occurred during minification
+//   - Error: Any error that occurred during minification
 func contentMinify(content string) (string, error) {
 	minifier := minify.New()
 	minifier.AddFunc(mimeJS, js.Minify)
@@ -387,7 +387,7 @@ func GetBundleFilename(bundleName, bundlesFile string) (string, error) {
 //
 // Returns:
 //   - bool: True if the bundle file exists, false otherwise
-//   - error: Any error that occurred during the check
+//   - Error: Any error that occurred during the check
 //
 // Example:
 //
@@ -478,8 +478,8 @@ func fileContentMinify(fileType string, content []byte) ([]byte, error) {
 	switch fileType {
 	case "css":
 		m := minify.New()
-		m.AddFunc("text/css", css.Minify)
-		minified, err = m.Bytes("text/css", content)
+		m.AddFunc(mimeCSS, css.Minify)
+		minified, err = m.Bytes(mimeCSS, content)
 	case "js":
 		m := minify.New()
 		m.AddFunc(mimeJS, js.Minify)
@@ -533,7 +533,7 @@ func cleanupOldMinifiedFiles(inputPath, outputPath, outputDir, baseName, fileTyp
 }
 
 // AndVersionFile minifies a file and creates a versioned copy with content-based hashing.
-// This is useful for individual file processing outside of the bundle system.
+// This is useful for individual file processing outside the bundle system.
 //
 // The function:
 // 1. Reads the input file
@@ -550,7 +550,7 @@ func cleanupOldMinifiedFiles(inputPath, outputPath, outputDir, baseName, fileTyp
 //
 // Returns:
 //   - string: The filename of the created minified file
-//   - error: Any error that occurred during processing
+//   - Error: Any error that occurred during processing
 //
 // Example:
 //
