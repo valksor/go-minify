@@ -1,5 +1,7 @@
 # Minify Package
 
+[![codecov](https://codecov.io/gh/valksor/go-minify/graph/badge.svg?token=ZXDETARTJQ)](https://codecov.io/gh/valksor/go-minify)
+
 A Go package that provides JavaScript and CSS minification capabilities with content-based hashing for cache-busting. It supports both bundle-based and single-file workflows, with automatic versioning and cleanup of old files.
 
 ## Features
