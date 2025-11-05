@@ -1,6 +1,7 @@
 # Minify Package
 
-[![codecov](https://codecov.io/gh/valksor/go-minify/graph/badge.svg?token=ZXDETARTJQ)](https://codecov.io/gh/valksor/go-minify)
+[![BSD-3-Clause](https://img.shields.io/badge/BSD--3--Clause-green?style=flat)](https://github.com/valksor/php-bundle/blob/master/LICENSE)
+[![Coverage Status](https://coveralls.io/repos/github/valksor/go-minify/badge.svg?branch=master)](https://coveralls.io/github/valksor/go-minify?branch=master)
 
 A Go package that provides JavaScript and CSS minification capabilities with content-based hashing for cache-busting. It supports both bundle-based and single-file workflows, with automatic versioning and cleanup of old files.
 
